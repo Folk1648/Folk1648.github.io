@@ -25,6 +25,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
 const renderer = new THREE.WebGLRenderer();
@@ -51,24 +52,59 @@ plane.receiveShadow = true;
 scene.add(plane);
 
 
-const loader = new THREE.OBJLoader();
-        loader.load('', function (object) {
-            object.castShadow = true; // ✅ วัตถุนี้สร้างเงา
-            // ตั้งค่า castShadow กับทุก mesh ใน object
-            object.traverse(function (child) {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: 0xffffff
-                    });
-                }
-            });
-            object.scale.set(0.2, 0.2, 0.2);
-            scene.add(object);
-        }, undefined, function (error) {
-            console.error('Error loading OBJ:', error);
-        });
+
+
+
+const loader = new THREE.GLTFLoader();
+loader.load('https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/Brick%20Building.glb',
+  function (gltf) {
+    const model = gltf.scene;
+    model.traverse(function (child) {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    scene.add(model);
+  },
+  undefined,
+  function (error) {
+    console.error('Error loading GLB:', error);
+  }
+);
+
+
+
+loader.load(
+  'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/Font1.glb',
+  function (gltf) {
+    const model = gltf.scene;
+
+    // ตั้งค่าเงา
+    model.traverse(function (child) {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    // ✅ ย้ายตำแหน่งโมเดลที่นี่
+    model.position.set(22, 5, 12); // (x, y, z)
+    // เช่น ถ้าอยากให้ลอยขึ้นหน่อย ก็เพิ่มค่า y
+
+    // ✅ ปรับขนาดได้ด้วย
+    model.scale.set(0.5, 0.5, 0.5);
+
+    // ✅ หมุนก็ได้
+    model.rotation.y = Math.PI / 2; // หมุน 90 องศา
+
+    scene.add(model);
+  },
+  undefined,
+  function (error) {
+    console.error('Error loading GLB:', error);
+  }
+);
 
 
 
@@ -86,7 +122,7 @@ pmremGenerator.compileEquirectangularShader();
 new THREE.RGBELoader()
   .setDataType(THREE.UnsignedByteType)
   .load(
-    '',
+    'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/autumn_forest_04_1k%20%281%29.hdr',
     (hdrTexture) => {
       const envMap = pmremGenerator.fromEquirectangular(hdrTexture).texture;
       scene.background = envMap;
