@@ -26,6 +26,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <div id="camera-debug-info"></div>
 
     <script>
 const renderer = new THREE.WebGLRenderer();
@@ -38,20 +39,49 @@ const scene = new THREE.Scene();
 
 // Camera
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(10, 1, 2);
-camera.lookAt(0, 1, 0);
+
+// 1. 🎯 กำหนดตำแหน่งกล้อง: ให้อยู่ตรงหน้าอาคารพอดี
+camera.position.set(35, 9, 0);
+
+// 2. 🖱️ สร้างตัวควบคุม (เหมือนเดิม)
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-// Floor
-const planeGeometry = new THREE.PlaneGeometry(20, 20);
-const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-plane.rotation.x = -Math.PI / 2;
-plane.position.y = 0;
-plane.receiveShadow = true;
-scene.add(plane);
+// 3. 👀 กำหนดเป้าหมายให้กล้องและตัวควบคุมมองไปที่อาคาร
+controls.target.set(0, 9, 0); // << สั่งให้มองไปที่จุดศูนย์กลางของอาคาร
+controls.update(); // << สั่งให้ตัวควบคุมอัปเดตมุมมองทันที
+
+// บรรทัด camera.lookAt(0, 1, 0); ไม่จำเป็นแล้ว เพราะ controls.target จะจัดการแทน
 
 
+
+
+// 📸 โหลดรูป 121881.jpg แล้วให้ปรับตำแหน่งได้อิสระ
+const texLoader2 = new THREE.TextureLoader();
+texLoader2.load(
+  'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/121881.jpg',
+  (tex) => {
+    const imgPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 10),
+      new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide })
+    );
+
+    // 🧱 กำหนดตำแหน่งของรูป (สามารถปรับแต่ละแกนได้แยกกัน)
+    imgPlane.position.x = -15.5;    // ซ้าย(-) / ขวา(+)
+    imgPlane.position.y = 25;    // สูง(+)
+    imgPlane.position.z = -28.7;  // หน้า(-) / หลัง(+)
+
+    // 🔄 กำหนดการหมุนของรูป
+    imgPlane.rotation.x = 0;      // เงย/ก้ม
+    imgPlane.rotation.y = 2.4;    // หมุนซ้าย/ขวา (เรเดียน)
+    imgPlane.rotation.z = 0;      // เอียง/บิด
+
+    // ✅ เพิ่มเข้า scene
+    scene.add(imgPlane);
+    
+  },
+  undefined,
+  (err) => console.error('โหลดรูปไม่สำเร็จ:', err)
+);
 
 
 
@@ -76,7 +106,7 @@ loader.load('https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/
 
 
 loader.load(
-  'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/Font1.glb',
+  'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/Font_name.glb',
   function (gltf) {
     const model = gltf.scene;
 
@@ -85,28 +115,133 @@ loader.load(
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.material = new THREE.MeshStandardMaterial({ color: child.material.color });
       }
     });
 
-    // ✅ ย้ายตำแหน่งโมเดลที่นี่
-    model.position.set(22, 5, 12); // (x, y, z)
-    // เช่น ถ้าอยากให้ลอยขึ้นหน่อย ก็เพิ่มค่า y
+    // 🎯 ตำแหน่งของโลโก้ (ปรับง่าย)
+    model.position.x = -17.7;   // ซ้าย(-) / ขวา(+)
+    model.position.y = 14.8;    // สูง(+)
+    model.position.z = -32.5;    // หน้า(-) / หลัง(+)
 
-    // ✅ ปรับขนาดได้ด้วย
-    model.scale.set(0.5, 0.5, 0.5);
+    // 🎯 ขนาดของโลโก้
+    model.scale.set(1, 1, 1);
 
-    // ✅ หมุนก็ได้
-    model.rotation.y = Math.PI / 2; // หมุน 90 องศา
+    // 🎯 การหมุนโลโก้
+    model.rotation.x = 0;             // หมุนเงย/ก้ม
+    model.rotation.y = 2.4;   // หมุนซ้าย/ขวา
+    model.rotation.z = 0;             // หมุนเอียง
 
+    // ✅ เพิ่มเข้า scene
     scene.add(model);
+    
   },
   undefined,
   function (error) {
     console.error('Error loading GLB:', error);
+    
   }
+  
 );
 
+// ✨✨✨ --- โค้ดสำหรับไฟ Spotlight + Helper + GUI (แก้ไขลำดับแล้ว) --- ✨✨✨
 
+// 1. สร้าง SpotLight ดวงเดียว (
+const mainSpotLight = new THREE.SpotLight(
+    0xffffff,    // สีไฟ (ขาว)
+    1.4,         // ✨ ความสว่าง
+    80,          // ระยะของแสง
+    0.71,        // ✨ ความกว้างลำแสง
+    0.55         // ✨ ความเบลอขอบ
+);
+
+// 2. กำหนดตำแหน่งเริ่มต้นของ "ตัวไฟ" และ "เป้าหมาย"
+mainSpotLight.position.set(4, 10, -46); // ✨ ตำแหน่งไฟ
+mainSpotLight.target.position.set(-24, 20, -30); // ✨ ตำแหน่งเป้าหมาย
+
+// 3. เพิ่มไฟและเป้าหมายเข้าฉาก (สำคัญมาก!)
+scene.add(mainSpotLight);
+scene.add(mainSpotLight.target);
+
+// ✨✨✨ --- จบส่วนโค้ดไฟ --- ✨✨✨
+
+loader.load(
+  'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/KU%20Logo.glb',
+  function (gltf) {
+    const model = gltf.scene;
+
+    // ตั้งค่าเงา
+    model.traverse(function (child) {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.material = new THREE.MeshStandardMaterial({ color: child.material.color });
+      }
+    });
+
+    // 🎯 ตำแหน่งของโลโก้ (ปรับง่าย)
+    model.position.x = 5.8;   // ซ้าย(-) / ขวา(+)
+    model.position.y = 5.2;    // สูง(+)
+    model.position.z = -10.7;    // หน้า(-) / หลัง(+)
+
+    // 🎯 ขนาดของโลโก้
+    model.scale.set(15, 15, 15);
+
+    // 🎯 การหมุนโลโก้
+    model.rotation.x = 0;             // หมุนเงย/ก้ม
+    model.rotation.y = 2.4;   // หมุนซ้าย/ขวา
+    model.rotation.z = 0;             // หมุนเอียง
+
+    // ✅ เพิ่มเข้า scene
+    scene.add(model);
+    
+  },
+  undefined,
+  function (error) {
+    console.error('Error loading GLB:', error);
+    
+  }
+  
+);
+
+loader.load(
+  'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/creepy_scarecrow__horror_stylized.glb',
+  function (gltf) {
+    const model = gltf.scene;
+
+    // ตั้งค่าเงา
+    model.traverse(function (child) {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        
+      }
+    });
+
+    // 🎯 ตำแหน่งของโลโก้ (ปรับง่าย)
+    model.position.x = 25;   // ซ้าย(-) / ขวา(+)
+    model.position.y = 6.3;    // สูง(+)
+    model.position.z = 0;    // หน้า(-) / หลัง(+)
+
+    // 🎯 ขนาดของโลโก้
+    model.scale.set(3, 3, 3);
+
+    // 🎯 การหมุนโลโก้
+    model.rotation.x = 0;             // หมุนเงย/ก้ม
+    model.rotation.y = 1.5;   // หมุนซ้าย/ขวา
+    model.rotation.z = 0;             // หมุนเอียง
+
+    // ✅ เพิ่มเข้า scene
+    scene.add(model);
+    
+  },
+  undefined,
+  function (error) {
+    console.error('Error loading GLB:', error);
+    
+  }
+  
+);
 
 
 // Lights
