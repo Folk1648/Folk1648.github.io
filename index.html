@@ -26,6 +26,9 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
+
     <div id="camera-debug-info"></div>
 
     <script>
@@ -41,7 +44,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
 
 // 1. 🎯 กำหนดตำแหน่งกล้อง: ให้อยู่ตรงหน้าอาคารพอดี
-camera.position.set(35, 9, 0);
+camera.position.set(45, 9, 0);
 
 // 2. 🖱️ สร้างตัวควบคุม (เหมือนเดิม)
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -49,6 +52,25 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement);
 // 3. 👀 กำหนดเป้าหมายให้กล้องและตัวควบคุมมองไปที่อาคาร
 controls.target.set(0, 9, 0); // << สั่งให้มองไปที่จุดศูนย์กลางของอาคาร
 controls.update(); // << สั่งให้ตัวควบคุมอัปเดตมุมมองทันที
+
+controls.update(); // << บรรทัดสุดท้ายของส่วนกล้อง
+
+
+// 🟢 วัสดุกึ่งกระจกสำหรับปุ่มทรงกลม
+const glassMaterial = new THREE.MeshPhysicalMaterial({
+  color: 0x88aaff,
+  metalness: 0,
+  roughness: 0.1,
+  transmission: 0.8,
+  transparent: true,
+  opacity: 1.0,
+  ior: 1.4,
+  thickness: 0.4,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.05
+});
+
+
 
 // บรรทัด camera.lookAt(0, 1, 0); ไม่จำเป็นแล้ว เพราะ controls.target จะจัดการแทน
 
@@ -86,7 +108,7 @@ texLoader2.load(
 
 
 const loader = new THREE.GLTFLoader();
-loader.load('https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/Brick%20Building.glb',
+loader.load('https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/Ground.glb',
   function (gltf) {
     const model = gltf.scene;
     model.traverse(function (child) {
@@ -204,43 +226,42 @@ loader.load(
   
 );
 
+let scarecrowModel;
+let mixer; // ตัวจัดการ animation
+let walkDirection = 1;
+let walkSpeed = 0.02;
+
+const newloader = new THREE.GLTFLoader();
+
 loader.load(
   'https://raw.githubusercontent.com/Folk1648/Folk1648.github.io/main/creepy_scarecrow__horror_stylized.glb',
   function (gltf) {
-    const model = gltf.scene;
-
-    // ตั้งค่าเงา
-    model.traverse(function (child) {
+    scarecrowModel = gltf.scene;
+    scarecrowModel.traverse(function (child) {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
-        
       }
     });
 
-    // 🎯 ตำแหน่งของโลโก้ (ปรับง่าย)
-    model.position.x = 25;   // ซ้าย(-) / ขวา(+)
-    model.position.y = 6.3;    // สูง(+)
-    model.position.z = 0;    // หน้า(-) / หลัง(+)
+    // ปรับตำแหน่งและขนาด
+    scarecrowModel.position.set(25, 2, 0);
+    scarecrowModel.scale.set(3, 3, 3);
+    scarecrowModel.rotation.y = 1.5;
 
-    // 🎯 ขนาดของโลโก้
-    model.scale.set(3, 3, 3);
+    // ถ้ามี animation ในไฟล์
+    if (gltf.animations && gltf.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(scarecrowModel);
+      const action = mixer.clipAction(gltf.animations[0]); // ใช้อันแรก (เช่นท่าเดิน)
+      action.play();
+    }
 
-    // 🎯 การหมุนโลโก้
-    model.rotation.x = 0;             // หมุนเงย/ก้ม
-    model.rotation.y = 1.5;   // หมุนซ้าย/ขวา
-    model.rotation.z = 0;             // หมุนเอียง
-
-    // ✅ เพิ่มเข้า scene
-    scene.add(model);
-    
+    scene.add(scarecrowModel);
   },
   undefined,
   function (error) {
     console.error('Error loading GLB:', error);
-    
   }
-  
 );
 
 
@@ -267,12 +288,155 @@ new THREE.RGBELoader()
     }
   );
 
+// ========== CLICKABLE BUTTONS (ABOUT / BACK) ==========
+
+const clickable = [];
+
+// สร้างชิ้นงาน + (ตัวหนังสือ 3D กลางปุ่มถ้ามี text)
+function addObj(mesh, pos, name, text = null, fontUrl =
+  'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json') {
+
+  mesh.position.copy(pos);
+  mesh.name = name;
+  scene.add(mesh);
+  clickable.push(mesh);
+
+  if (text) {
+    const loader = new THREE.FontLoader();
+    loader.load(fontUrl, function (font) {
+      const textGeometry = new THREE.TextGeometry(text, {
+        font, size: 0.45, height: 0.08, curveSegments: 12
+      });
+      textGeometry.center();
+      const textMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffd54f, metalness: 0.2, roughness: 0.35,
+        emissive: 0x442200, emissiveIntensity: 0.25
+      });
+      const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+      textMesh.position.copy(pos);
+      textMesh.rotation.y = Math.PI / 2; // หันหาแนวกล้องจาก +X
+      textMesh.name = name;              // ✅ สำคัญ: ให้ชื่อเดียวกับปุ่ม
+      scene.add(textMesh);
+      clickable.push(textMesh);
+    });
+  }
+  return mesh;
+}
+
+// --- ปุ่มตัวอย่างอื่นๆ (ถ้ายังไม่ใช้ ข้ามได้) ---
+// addObj(new THREE.Mesh(new THREE.SphereGeometry(0.45,32,16),glassMaterial), new THREE.Vector3(5,4,5), 'Box', 'SH');
+
+// --- ปุ่มหน้าโรงนา 2 อัน: ABOUT ME / Back ---
+addObj(
+  new THREE.Mesh(new THREE.SphereGeometry(0.6, 32, 16), glassMaterial),
+  new THREE.Vector3(22.0, 3.2, -3.5), // ซ้ายประตูเล็กน้อย
+  'ABOUT',
+  'ABOUT ME'
+);
+addObj(
+  new THREE.Mesh(new THREE.SphereGeometry(0.6, 32, 16), glassMaterial),
+  new THREE.Vector3(-10, 20, -30), // ขวาประตูเล็กน้อย
+  'BACK',
+  'Back'
+);
+
+// 🧭 องศาที่ต้องการ (หน่วยเรเดียน)
+const backRot = { x: 0, y: 2.4, z: 0 }; // ✅ ต้องมี ; ปิดบรรทัดนี้
+
+function setBackRotation() {
+  // หมุนวัตถุทุกชิ้นที่ชื่อ 'BACK' (ทั้งลูกบอลและตัวหนังสือ)
+  clickable
+    .filter(o => o.name === 'BACK')
+    .forEach(o => o.rotation.set(backRot.x, backRot.y, backRot.z));
+}
+
+setBackRotation(); // ครั้งแรก (จะโดนเฉพาะลูกกลม)
+setTimeout(setBackRotation, 400); // โดนซ้ำตอนตัวหนังสือโหลดเสร็จ
+
+
+// --- พรีเซ็ตตำแหน่งกล้องต่อวัตถุ ---
+const VIEWS = {
+  // (หากมีของเดิมในไฟล์อื่น ให้คงไว้ที่ที่คุณใช้—อันนี้ใส่เฉพาะที่จำเป็น)
+  ABOUT: { // ไปมุม KU
+    pos: new THREE.Vector3(-9.0, 22.7, -42.9),
+    tar: new THREE.Vector3( -35,  15,  0) // ตำแหน่ง KU Logo ของคุณ
+  },
+  BACK: {  // กลับหน้าโรงนา
+    pos: new THREE.Vector3(45, 9, 0),
+    tar: new THREE.Vector3( 0, 9, 0)
+  }
+};
+
+// --- Raycaster + คลิกเพื่อสลับมุม ---
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+function setPointer(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const x = (e.clientX ?? e.touches?.[0]?.clientX ?? 0) - r.left;
+  const y = (e.clientY ?? e.touches?.[0]?.clientY ?? 0) - r.top;
+  pointer.x = (x / r.width) * 2 - 1;
+  pointer.y = -(y / r.height) * 2 + 1;
+}
+
+let camTargetPos = camera.position.clone();
+let camTargetLook = controls.target.clone();
+
+function onPick(e) {
+  setPointer(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(clickable, false)[0];
+  if (!hit) return;
+  const view = VIEWS[hit.object.name];
+  if (!view) return;
+  camTargetPos.copy(view.pos);
+  camTargetLook.copy(view.tar);
+}
+renderer.domElement.addEventListener('click', onPick);
+renderer.domElement.addEventListener('touchend', onPick, { passive: true });
+
+// เริ่มต้นที่หน้าโรงนา (กันพิกัดเพี้ยน)
+camera.position.set(45, 9, 0);
+controls.target.set(0, 9, 0);
+controls.update();
+
+// ปรับขนาดจอ
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+
+
+
+const clock = new THREE.Clock();
+controls.update();
 function animate() {
-  
-  renderer.render(scene, camera);
   requestAnimationFrame(animate);
+
+  const delta = clock.getDelta();
+  if (mixer) mixer.update(delta);
+
+  // ✅ เลื่อนกล้องนุ่มๆ ไปยังจุดเป้าหมาย
+  camera.position.lerp(camTargetPos, 0.05);
+  controls.target.lerp(camTargetLook, 0.05);
+  controls.update();
+
+  // เดินไปกลับของ scarecrow (ของเดิม)
+  if (scarecrowModel) {
+    scarecrowModel.position.x += walkSpeed * walkDirection;
+    if (scarecrowModel.position.x > 35 || scarecrowModel.position.x < 25) {
+      walkDirection *= -1;
+      scarecrowModel.rotation.y += Math.PI;
+    }
+  }
+
+  renderer.render(scene, camera);
 }
 animate();
+
+
 </script>
 </body>
 </html>
